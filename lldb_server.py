@@ -15,7 +15,7 @@ elif len(sys.argv) == 2:
     port = 12597
 elif len(sys.argv) == 3:
     lldb_path = sys.argv[1]
-    port = int(sys.argv[2])    
+    port = int(sys.argv[2])
 
 print("Running with Python module path {} on localhost:{}...".format(lldb_path, port))
 sys.path.insert(1, lldb_path)
@@ -33,6 +33,7 @@ breakpoint_status = {}
 
 lldb_handle = SBDebugger.Create()
 lldb_handle.SetAsync(True)
+
 
 # Internal
 def _get_stop_reason(thread):
@@ -60,6 +61,7 @@ def _get_stop_reason(thread):
     elif reason == eStopReasonInstrumentation:
         return "instrumentation"
     return "running"
+
 
 def _get_status(process):
     state = process.GetState()
@@ -93,6 +95,7 @@ def _get_status(process):
     else:
         return "unknown " + str(state)
 
+
 def _stop_event():
     global status
     event = SBEvent()
@@ -102,6 +105,7 @@ def _stop_event():
             return
         if stop_event_listener.WaitForEventForBroadcasterWithType(1, broadcaster, SBProcess.eBroadcastBitStateChanged, event):
             status = _get_status(process)
+
 
 def _output_event():
     global stderr_buffer, stdout_buffer
@@ -121,6 +125,7 @@ def _output_event():
                 print("output event", stream.GetData())
                 print("stderr", process.GetSTDERR(1024))
 
+
 def shutdown_server():
     global server, out_event_listener, stop_event_listener
     stop()
@@ -129,13 +134,14 @@ def shutdown_server():
     SBDebugger.Destroy(lldb_handle)
     server.server_close()
 
+
 # load executable
 def prepare(executable, params, environment, path, work_dir):
     global target, process, stop_event_listener, out_event_listener, status
     if not target:
         target = lldb_handle.CreateTargetWithFileAndTargetTriple(executable, LLDB_ARCH_DEFAULT)
     if not target:
-        raise Exception("Could not create target")       
+        raise Exception("Could not create target")
 
     error = SBError()
     process = target.Launch(lldb_handle.GetListener(), params, environment, None, None, None, work_dir, eLaunchFlagStopAtEntry, True, error)
@@ -144,7 +150,7 @@ def prepare(executable, params, environment, path, work_dir):
 
     stop_event_listener = SBListener('stop_listener')
     out_event_listener = SBListener('output_listener')
-    
+
     broadcaster = process.GetBroadcaster()
     if not broadcaster.AddListener(stop_event_listener, SBProcess.eBroadcastBitStateChanged):
         raise Exception("Could not add stop listener")
@@ -154,8 +160,9 @@ def prepare(executable, params, environment, path, work_dir):
 
     threading.Thread(target=_stop_event, name='stop_event_listener', args=()).start()
     threading.Thread(target=_output_event, name='output_event_listener', args=()).start()
-    
+
     status = _get_status(process)
+
 
 # running, interrupting and stepping
 def start():
@@ -166,6 +173,7 @@ def start():
     if not error.Success():
         raise Exception("Could not continue: " + str(error))
 
+
 def pause():
     global process
     if not process:
@@ -174,12 +182,14 @@ def pause():
     if not error.Success():
         raise Exception("Could not continue: " + str(error))
 
+
 def step_into():
     global process
     if not process:
         raise Exception("No process to step")
     thread = process.GetSelectedThread()
     thread.StepInto()
+
 
 def step_over():
     global process
@@ -188,12 +198,14 @@ def step_over():
     thread = process.GetSelectedThread()
     thread.StepOver()
 
+
 def step_out():
     global process
     if not process:
         raise Exception("No process to step")
     thread = process.GetSelectedThread()
     thread.StepOut()
+
 
 def stop():
     global process, stop_event_listener
@@ -203,12 +215,14 @@ def stop():
             raise Exception("Could not stop: " + str(error))
     process = None
 
+
 # thread selection
 def select_thread(id):
     global process
     if not process:
         raise Exception("No process to work on")
     return process.SetSelectedThreadByID(id)
+
 
 def selected_thread():
     global process
@@ -218,6 +232,7 @@ def selected_thread():
     thread = process.GetSelectedThread()
     return _get_thread(thread)
 
+
 # input/output to target
 def get_stdout():
     global stdout_buffer
@@ -225,11 +240,13 @@ def get_stdout():
     stdout_buffer = ""
     return buf
 
+
 def get_stderr():
     global stderr_buffer
     buf = stderr_buffer
     stderr_buffer = ""
     return buf
+
 
 def push_stdin(data):
     global process
@@ -237,10 +254,12 @@ def push_stdin(data):
         raise Exception("No process to send data to")
     process.PutSTDIN(data)
 
+
 # status and backtraces
 def get_status():
     global status
     return status
+
 
 def _get_backtrace(thread):
     bt_frames = []
@@ -259,7 +278,7 @@ def _get_backtrace(thread):
             inlined = frame.IsInlined()
             args = {}
             for variable in frame.get_arguments():
-                args[variable.GetName()] = variable.GetValue()
+                args[variable.GetName()] = variable.GetSummary()
             bt_frames.append({
                 "address": str(load_addr),  # number to big for rpc -.-
                 "module": mod_name,
@@ -291,9 +310,10 @@ def get_backtrace():
         raise Exception("No process to get traces of")
     bt = {}
     for thread in process.threads:
-        bt[str(thread.GetThreadID())] = _get_thread(thread)        
+        bt[str(thread.GetThreadID())] = _get_thread(thread)
         bt[str(thread.GetThreadID())]['bt'] = _get_backtrace(thread)
     return bt
+
 
 def get_backtrace_for_selected_thread():
     global process
@@ -303,6 +323,7 @@ def get_backtrace_for_selected_thread():
     bt = _get_thread(thread)
     bt['bt'] = _get_backtrace(thread)
     return bt
+
 
 def _get_thread(thread):
     selected_thread = process.GetSelectedThread()
@@ -317,6 +338,7 @@ def _get_thread(thread):
         "selected": selected
     }
 
+
 def get_threads():
     global process
     if not process:
@@ -326,6 +348,7 @@ def get_threads():
     for thread in process.threads:
         threads.append(_get_thread(thread))
     return threads
+
 
 def get_arguments(thread_id, frame_index):
     global process
@@ -338,6 +361,7 @@ def get_arguments(thread_id, frame_index):
     for variable in frame.get_arguments():
         result[variable.GetName()] = variable.GetSummary()
     return result
+
 
 def get_local_variables(thread_id, frame_index):
     global process
@@ -353,6 +377,7 @@ def get_local_variables(thread_id, frame_index):
     for variable in frame.get_statics():
         result[variable.GetName()] = str(variable.GetSummary())
     return result
+
 
 def get_all_variables(thread_id, frame_index):
     global process
@@ -373,10 +398,11 @@ def execute_lldb_command(command):
     res = SBCommandReturnObject()
     interpreter.HandleCommand(command, res)
     return {
-        "succeeded" :res.Succeeded(),
+        "succeeded": res.Succeeded(),
         "output": res.GetOutput(),
         "error": res.GetError()
     }
+
 
 # breakpoints
 def get_breakpoints():
@@ -397,6 +423,7 @@ def get_breakpoints():
         })
     return breakpoints
 
+
 def set_breakpoint(filename, line_number, condition, ignore_count):
     global target
     if not target:
@@ -408,11 +435,13 @@ def set_breakpoint(filename, line_number, condition, ignore_count):
         bp.SetIgnoreCount(ignore_count)
     return bp.id
 
+
 def delete_breakpoint(id):
     global target
     if not target:
         raise Exception("No target")
     target.BreakpointDelete(id)
+
 
 def enable_breakpoint(id):
     global target
@@ -424,6 +453,7 @@ def enable_breakpoint(id):
             bp.SetEnabled(True)
             break
 
+
 def disable_breakpoint(id):
     global target
     if not target:
@@ -434,11 +464,13 @@ def disable_breakpoint(id):
             bp.SetEnabled(False)
             break
 
+
 def disable_all_breakpoints():
     global target
     if not target:
         raise Exception("No target")
     target.DisableAllBreakpoints()
+
 
 def enable_all_breakpoints():
     global target
@@ -446,11 +478,13 @@ def enable_all_breakpoints():
         raise Exception("No target")
     target.EnableAllBreakpoints()
 
+
 def delete_all_breakpoints():
     global target
     if not target:
         raise Exception("No target")
     target.DeleteAllBreakpoints()
+
 
 def disable_breakpoints():
     global target, breakpoint_status
@@ -463,6 +497,7 @@ def disable_breakpoints():
         bp = target.GetBreakpointAtIndex(i)
         breakpoint_status[str(bp.id)] = bp.IsEnabled()
     disable_all_breakpoints()
+
 
 def enable_breakpoints():
     global target, breakpoint_status
